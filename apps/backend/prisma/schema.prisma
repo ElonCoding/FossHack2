@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  ORGANIZER
+  ADMIN
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  passwordHash  String
+  role          Role           @default(STUDENT)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  events        Event[]        @relation("OrganizerEvents")
+  registrations Registration[]
+  notifications Notification[]
+}
+
+model Event {
+  id          String        @id @default(uuid())
+  title       String
+  description String
+  date        DateTime
+  location    String
+  capacity    Int
+  status      EventStatus   @default(DRAFT)
+  organizerId String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  organizer   User          @relation("OrganizerEvents", fields: [organizerId], references: [id])
+  ticketTypes TicketType[]
+  registrations Registration[]
+}
+
+model TicketType {
+  id          String        @id @default(uuid())
+  eventId     String
+  name        String
+  price       Float
+  quantity    Int
+  description String?
+
+  event       Event         @relation(fields: [eventId], references: [id])
+  registrations Registration[]
+}
+
+model Registration {
+  id            String        @id @default(uuid())
+  userId        String
+  eventId       String
+  ticketTypeId  String
+  paymentStatus PaymentStatus @default(PENDING)
+  paymentId     String?
+  checkedIn     Boolean       @default(false)
+  qrCodeData    String?
+  createdAt     DateTime      @default(now())
+
+  user          User          @relation(fields: [userId], references: [id])
+  event         Event         @relation(fields: [eventId], references: [id])
+  ticketType    TicketType    @relation(fields: [ticketTypeId], references: [id])
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  userId     String
+  message    String
+  readStatus Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+}
