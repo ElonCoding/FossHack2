@@ -34,7 +34,7 @@ export const register = async (req: Request, res: Response): Promise<any> => {
       data: {
         name,
         email,
-        passwordHash,
+        password: passwordHash,
         role: role || 'STUDENT',
       },
     });
@@ -74,7 +74,7 @@ export const login = async (req: Request, res: Response): Promise<any> => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }

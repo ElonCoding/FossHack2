@@ -7,7 +7,7 @@ import crypto from 'crypto';
 const ticketTypeSchema = z.object({
   name: z.string().min(2),
   price: z.number().min(0),
-  quantity: z.number().int().positive(),
+  limit: z.number().int().positive(),
   description: z.string().optional(),
 });
 
@@ -55,20 +55,21 @@ export const getTicketTypes = async (req: Request, res: Response): Promise<any> 
   }
 };
 
-const registerSchema = z.object({
+const createOrderSchema = z.object({
   eventId: z.string().uuid(),
   ticketTypeId: z.string().uuid(),
+  quantity: z.number().int().positive().default(1),
 });
 
-export const registerForEvent = async (req: AuthRequest, res: Response): Promise<any> => {
+export const createOrder = async (req: AuthRequest, res: Response): Promise<any> => {
   try {
-    const parsedParams = registerSchema.safeParse(req.body);
+    const parsedParams = createOrderSchema.safeParse(req.body);
 
     if (!parsedParams.success) {
       return res.status(400).json({ message: 'Invalid input', errors: parsedParams.error.issues });
     }
 
-    const { eventId, ticketTypeId } = parsedParams.data;
+    const { eventId, ticketTypeId, quantity } = parsedParams.data;
     const userId = req.user!.id;
 
     // Check if event exists and is published
@@ -77,109 +78,81 @@ export const registerForEvent = async (req: AuthRequest, res: Response): Promise
       return res.status(404).json({ message: 'Valid event not found' });
     }
 
-    // Check if user is already registered for this event
-    const existingRegistration = await prisma.registration.findFirst({
-      where: { userId, eventId, paymentStatus: { in: ['PENDING', 'COMPLETED'] } },
-    });
-    if (existingRegistration) {
-      return res.status(400).json({ message: 'You already have an active registration for this event' });
-    }
-
-    // Check capacity and ticket type
+    // Check ticket type availability
     const ticketType = await prisma.ticketType.findUnique({ where: { id: ticketTypeId } });
     if (!ticketType || ticketType.eventId !== eventId) {
       return res.status(400).json({ message: 'Invalid ticket type' });
     }
 
-    const currentRegistrations = await prisma.registration.count({
-      where: { eventId, paymentStatus: 'COMPLETED' },
-    });
-
-    if (currentRegistrations >= event.capacity) {
-      return res.status(400).json({ message: 'Event is at full capacity' });
+    if (ticketType.sold + quantity > ticketType.limit) {
+      return res.status(400).json({ message: 'Not enough tickets available' });
     }
 
-    // Create registration (PENDING status by default)
-    const registration = await prisma.registration.create({
+    // Calculate total amount
+    const totalAmount = ticketType.price * quantity;
+
+    // Create Order
+    // In a real app, we would initiate payment here (Stripe/Razorpay)
+    // For now, we simulate a successful payment immediately
+    const order = await prisma.order.create({
       data: {
         userId,
         eventId,
-        ticketTypeId,
-        paymentStatus: ticketType.price === 0 ? 'COMPLETED' : 'PENDING',
-        qrCodeData: crypto.randomBytes(16).toString('hex'), // Initial QR data, to be finalized after payment
+        totalAmount,
+        status: 'COMPLETED', // Simulating successful payment
+        paymentRef: `PAY-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
       },
-      include: {
-        event: { select: { title: true, date: true } },
-        ticketType: { select: { name: true, price: true } }
-      }
+    });
+
+    // Generate Tickets
+    const ticketsData = [];
+    for (let i = 0; i < quantity; i++) {
+      ticketsData.push({
+        userId,
+        eventId,
+        ticketTypeId,
+        orderId: order.id,
+        qrCodeValue: crypto.randomBytes(16).toString('hex'), // Unique QR value
+      });
+    }
+
+    await prisma.ticket.createMany({
+      data: ticketsData,
+    });
+
+    // Update sold count
+    await prisma.ticketType.update({
+      where: { id: ticketTypeId },
+      data: { sold: { increment: quantity } },
     });
 
     res.status(201).json({ 
-      message: ticketType.price === 0 ? 'Registered successfully' : 'Registration initiated, please complete payment',
-      registration 
+      message: 'Order created and tickets generated successfully', 
+      orderId: order.id 
     });
+
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error during registration' });
+    res.status(500).json({ message: 'Server error creating order' });
   }
 };
 
-const verifyPaymentSchema = z.object({
-  paymentId: z.string().min(1),
-  status: z.enum(['COMPLETED', 'FAILED']),
-});
-
-export const verifyPayment = async (req: AuthRequest, res: Response): Promise<any> => {
+export const getMyTickets = async (req: AuthRequest, res: Response): Promise<any> => {
   try {
-    const { id } = req.params;
-    const parsedParams = verifyPaymentSchema.safeParse(req.body);
-
-    if (!parsedParams.success) {
-      return res.status(400).json({ message: 'Invalid input', errors: parsedParams.error.issues });
-    }
-
-    const registration = await prisma.registration.findUnique({ where: { id } });
-
-    if (!registration) {
-      return res.status(404).json({ message: 'Registration not found' });
-    }
-
-    if (registration.userId !== req.user!.id && req.user!.role !== 'ADMIN') {
-      return res.status(403).json({ message: 'Forbidden' });
-    }
-
-    // In a real app, verify with Stripe/Razorpay API here using paymentId.
-    // For this prototype, we accept the mock status.
-
-    const updatedRegistration = await prisma.registration.update({
-      where: { id },
-      data: {
-        paymentStatus: parsedParams.data.status,
-        paymentId: parsedParams.data.paymentId,
-      },
-    });
-
-    res.status(200).json({ message: 'Payment status updated', registration: updatedRegistration });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error processing payment' });
-  }
-};
-
-export const getUserRegistrations = async (req: AuthRequest, res: Response): Promise<any> => {
-  try {
-    const registrations = await prisma.registration.findMany({
-      where: { userId: req.user!.id },
+    const userId = req.user!.id;
+    const tickets = await prisma.ticket.findMany({
+      where: { userId },
       include: {
-        event: { select: { id: true, title: true, date: true, location: true } },
-        ticketType: { select: { name: true, price: true } }
+        event: { select: { title: true, date: true, location: true } },
+        ticketType: { select: { name: true, price: true } },
+        order: { select: { status: true, paymentRef: true } }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { event: { date: 'asc' } }
     });
-
-    res.status(200).json({ registrations });
+    
+    res.status(200).json({ tickets });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error fetching registrations' });
+    res.status(500).json({ message: 'Server error fetching tickets' });
   }
 };

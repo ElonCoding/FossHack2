@@ -16,6 +16,7 @@ enum Role {
 enum EventStatus {
   DRAFT
   PUBLISHED
+  CANCELLED
   COMPLETED
 }
 
@@ -23,73 +24,91 @@ enum PaymentStatus {
   PENDING
   COMPLETED
   FAILED
+  REFUNDED
 }
 
 model User {
-  id            String         @id @default(uuid())
-  name          String
-  email         String         @unique
-  passwordHash  String
-  role          Role           @default(STUDENT)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(STUDENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  events        Event[]        @relation("OrganizerEvents")
-  registrations Registration[]
-  notifications Notification[]
+  events    Event[]  @relation("EventOrganizer")
+  tickets   Ticket[]
+  orders    Order[]
 }
 
 model Event {
-  id          String        @id @default(uuid())
+  id          String      @id @default(uuid())
   title       String
   description String
   date        DateTime
   location    String
   capacity    Int
-  status      EventStatus   @default(DRAFT)
+  status      EventStatus @default(DRAFT)
   organizerId String
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
-  organizer   User          @relation("OrganizerEvents", fields: [organizerId], references: [id])
+  organizer   User         @relation("EventOrganizer", fields: [organizerId], references: [id])
   ticketTypes TicketType[]
-  registrations Registration[]
+  tickets     Ticket[]
+  orders      Order[]
 }
 
 model TicketType {
-  id          String        @id @default(uuid())
+  id          String   @id @default(uuid())
   eventId     String
-  name        String
-  price       Float
-  quantity    Int
+  name        String   // e.g., "Early Bird", "VIP"
   description String?
-
-  event       Event         @relation(fields: [eventId], references: [id])
-  registrations Registration[]
+  price       Float
+  limit       Int      // Available quantity
+  sold        Int      @default(0)
+  
+  event       Event    @relation(fields: [eventId], references: [id])
+  tickets     Ticket[]
 }
 
-model Registration {
+model Order {
   id            String        @id @default(uuid())
   userId        String
   eventId       String
-  ticketTypeId  String
-  paymentStatus PaymentStatus @default(PENDING)
-  paymentId     String?
-  checkedIn     Boolean       @default(false)
-  qrCodeData    String?
+  totalAmount   Float
+  paymentRef    String?       // Stripe/Razorpay Payment ID
+  status        PaymentStatus @default(PENDING)
   createdAt     DateTime      @default(now())
-
-  user          User          @relation(fields: [userId], references: [id])
-  event         Event         @relation(fields: [eventId], references: [id])
-  ticketType    TicketType    @relation(fields: [ticketTypeId], references: [id])
+  
+  user          User     @relation(fields: [userId], references: [id])
+  event         Event    @relation(fields: [eventId], references: [id])
+  tickets       Ticket[]
 }
 
-model Notification {
-  id         String   @id @default(uuid())
-  userId     String
-  message    String
-  readStatus Boolean  @default(false)
-  createdAt  DateTime @default(now())
+model Ticket {
+  id           String   @id @default(uuid())
+  qrCodeValue  String   @unique // Unique string for QR generation
+  userId       String
+  eventId      String
+  ticketTypeId String
+  orderId      String
+  isCheckedIn  Boolean  @default(false)
+  checkInTime  DateTime?
+  
+  user         User       @relation(fields: [userId], references: [id])
+  event        Event      @relation(fields: [eventId], references: [id])
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
+  order        Order      @relation(fields: [orderId], references: [id])
+  checkInLogs  CheckInLog[]
+}
 
-  user       User     @relation(fields: [userId], references: [id])
+model CheckInLog {
+  id         String   @id @default(uuid())
+  ticketId   String
+  scannedAt  DateTime @default(now())
+  scannedBy  String   // Organizer/Volunteer ID who scanned
+  status     String   // "SUCCESS", "DUPLICATE", "INVALID"
+
+  ticket     Ticket   @relation(fields: [ticketId], references: [id])
 }
