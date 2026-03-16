@@ -51,7 +51,7 @@ export const getEventRegistrations = async (req: AuthRequest, res: Response): Pr
    try {
      const { eventId } = req.params;
 
-     const event = await prisma.event.findUnique({ where: { id: eventId } });
+     const event = await prisma.event.findUnique({ where: { id: eventId as string } });
      if (!event) {
        return res.status(404).json({ message: 'Event not found' });
      }
@@ -61,7 +61,7 @@ export const getEventRegistrations = async (req: AuthRequest, res: Response): Pr
      }
 
      const tickets = await prisma.ticket.findMany({
-       where: { eventId },
+       where: { eventId: eventId as string },
        include: {
          user: { select: { id: true, name: true, email: true } },
          ticketType: { select: { name: true, price: true } },

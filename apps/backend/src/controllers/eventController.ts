@@ -66,7 +66,7 @@ export const getEventById = async (req: Request, res: Response): Promise<any> =>
   try {
     const { id } = req.params;
     const event = await prisma.event.findUnique({
-      where: { id },
+      where: { id: id as string },
       include: {
         organizer: { select: { id: true, name: true, email: true } },
         ticketTypes: true,
@@ -93,7 +93,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<any>
       updateData.date = new Date(updateData.date);
     }
 
-    const event = await prisma.event.findUnique({ where: { id } });
+    const event = await prisma.event.findUnique({ where: { id: id as string } });
 
     if (!event) {
       return res.status(404).json({ message: 'Event not found' });
@@ -104,7 +104,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<any>
     }
 
     const updatedEvent = await prisma.event.update({
-      where: { id },
+      where: { id: id as string },
       data: updateData,
     });
 
@@ -128,7 +128,7 @@ export const updateEventStatus = async (req: AuthRequest, res: Response): Promis
       return res.status(400).json({ message: 'Invalid status', errors: parsedParams.error.issues });
     }
 
-    const event = await prisma.event.findUnique({ where: { id } });
+    const event = await prisma.event.findUnique({ where: { id: id as string } });
 
     if (!event) {
       return res.status(404).json({ message: 'Event not found' });
@@ -139,7 +139,7 @@ export const updateEventStatus = async (req: AuthRequest, res: Response): Promis
     }
 
     const updatedEvent = await prisma.event.update({
-      where: { id },
+      where: { id: id as string },
       data: { status: parsedParams.data.status },
     });
 

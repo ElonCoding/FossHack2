@@ -1,6 +1,31 @@
 version: '3.8'
 
 services:
+  frontend:
+    build: ./apps/frontend
+    container_name: dev_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:5000/api
+    restart: unless-stopped
+
+  backend:
+    build: ./apps/backend
+    container_name: dev_backend
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      DATABASE_URL: postgres://dev_user:dev_password@postgres:5432/dev_event_db
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev_secret_key_123
+    restart: unless-stopped
+
   postgres:
     image: postgres:15-alpine
     container_name: dev_postgres
@@ -19,18 +44,6 @@ services:
     container_name: dev_redis
     ports:
       - "6379:6379"
-    restart: unless-stopped
-
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: dev_pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@dev.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    depends_on:
-      - postgres
     restart: unless-stopped
 
 volumes:

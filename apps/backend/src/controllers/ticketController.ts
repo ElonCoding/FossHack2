@@ -20,7 +20,7 @@ export const createTicketType = async (req: AuthRequest, res: Response): Promise
       return res.status(400).json({ message: 'Invalid input', errors: parsedParams.error.issues });
     }
 
-    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    const event = await prisma.event.findUnique({ where: { id: eventId as string } });
 
     if (!event) {
       return res.status(404).json({ message: 'Event not found' });
@@ -33,7 +33,7 @@ export const createTicketType = async (req: AuthRequest, res: Response): Promise
     const ticketType = await prisma.ticketType.create({
       data: {
         ...parsedParams.data,
-        eventId,
+        eventId: eventId as string,
       },
     });
 
@@ -47,7 +47,7 @@ export const createTicketType = async (req: AuthRequest, res: Response): Promise
 export const getTicketTypes = async (req: Request, res: Response): Promise<any> => {
   try {
     const { eventId } = req.params;
-    const ticketTypes = await prisma.ticketType.findMany({ where: { eventId } });
+    const ticketTypes = await prisma.ticketType.findMany({ where: { eventId: eventId as string } });
     res.status(200).json({ ticketTypes });
   } catch (error) {
     console.error(error);
