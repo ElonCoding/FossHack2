@@ -18,13 +18,35 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+interface Event {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  location: string;
+  capacity: number;
+  organizer: {
+    name: string;
+    email: string;
+  };
+}
+
+interface TicketType {
+  id: string;
+  name: string;
+  price: number;
+  description: string;
+  limit: number;
+  sold: number;
+}
+
 export default function EventDetailsPage() {
-  const { id } = useParams();
+  const { id } = useParams() as { id: string };
   const { isAuthenticated, user } = useAuthStore();
   const router = useRouter();
 
-  const [event, setEvent] = useState<any>(null);
-  const [ticketTypes, setTicketTypes] = useState<any[]>([]);
+  const [event, setEvent] = useState<Event | null>(null);
+  const [ticketTypes, setTicketTypes] = useState<TicketType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRegistering, setIsRegistering] = useState(false);
 
@@ -41,17 +63,18 @@ export default function EventDetailsPage() {
       setEvent(res.data.event);
     } catch (error) {
       toast.error("Failed to load event");
-    } finally {
       setIsLoading(false);
     }
   };
 
   const fetchTicketTypes = async () => {
     try {
-      const res = await api.get(`/tickets/event/${id}/types`);
+      const res = await api.get(`/tickets/types/${id}`);
       setTicketTypes(res.data.ticketTypes);
     } catch (error) {
       console.error("Failed to load ticket types");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -63,23 +86,17 @@ export default function EventDetailsPage() {
 
     try {
       setIsRegistering(true);
-      // Step 1: Register for the event
-      const regRes = await api.post("/tickets/register", {
-        eventId: id as string,
+      
+      const res = await api.post("/tickets/order", {
+        eventId: id,
         ticketTypeId,
+        quantity: 1, // Default to 1 for now
       });
 
-      // Step 2: (Mock) Payment Simulation
-      const paymentRes = await api.post("/tickets/verify-payment", {
-        registrationId: regRes.data.registration.id,
-        paymentId: `mock_payment_${Date.now()}`,
-        status: "COMPLETED",
-      });
-
-      toast.success("Registration successful! Check your dashboard for the ticket.");
+      toast.success("Order placed successfully! Check your tickets in dashboard.");
       router.push("/dashboard");
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Registration failed");
+      toast.error(error.response?.data?.message || "Order failed");
     } finally {
       setIsRegistering(false);
     }
@@ -97,104 +114,88 @@ export default function EventDetailsPage() {
     return (
       <div className="container mx-auto py-10 text-center">
         <h1 className="text-2xl font-bold">Event not found</h1>
-        <Button variant="link" onClick={() => router.push("/events")}>Back to Events</Button>
+        <Button variant="link" onClick={() => router.push("/events")} className="mt-4">
+          Back to Events
+        </Button>
       </div>
     );
   }
 
   return (
     <div className="container mx-auto py-10 px-4 max-w-4xl">
+      <Button variant="ghost" onClick={() => router.back()} className="mb-6 pl-0 hover:bg-transparent hover:text-primary">
+        ← Back
+      </Button>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         <div className="md:col-span-2 space-y-6">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight">{event.title}</h1>
-            <div className="flex flex-wrap gap-4 mt-4 text-muted-foreground">
-              <span className="flex items-center">
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {format(new Date(event.date), "PPP - p")}
+            <h1 className="text-4xl font-bold tracking-tight mb-2">{event.title}</h1>
+            <div className="flex items-center text-muted-foreground gap-4 text-sm">
+              <span className="flex items-center gap-1">
+                <CalendarIcon className="h-4 w-4" />
+                {format(new Date(event.date), "PPP p")}
               </span>
-              <span className="flex items-center">
-                <MapPin className="mr-2 h-4 w-4" />
+              <span className="flex items-center gap-1">
+                <MapPin className="h-4 w-4" />
                 {event.location}
               </span>
             </div>
           </div>
-          <div className="prose prose-neutral dark:prose-invert max-w-none">
-            <h3 className="text-xl font-semibold">About this event</h3>
-            <p className="whitespace-pre-wrap mt-2 text-muted-foreground bg-card p-6 rounded-lg border">
-              {event.description}
-            </p>
+
+          <div className="prose max-w-none dark:prose-invert">
+            <h3 className="text-xl font-semibold mb-2">About this event</h3>
+            <p className="whitespace-pre-line text-muted-foreground">{event.description}</p>
+          </div>
+
+          <div className="bg-muted/50 p-6 rounded-lg border">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Organizer
+            </h3>
+            <p className="font-medium">{event.organizer.name}</p>
+            <p className="text-sm text-muted-foreground">{event.organizer.email}</p>
           </div>
         </div>
 
-        <div>
-          <Card className="sticky top-20">
+        <div className="md:col-span-1">
+          <Card className="sticky top-24">
             <CardHeader>
-              <CardTitle>Registration</CardTitle>
-              <CardDescription>Select a ticket type to attend</CardDescription>
+              <CardTitle>Get Tickets</CardTitle>
+              <CardDescription>Select a ticket type to register</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground flex items-center">
-                  <Users className="mr-2 h-4 w-4" /> Capacity
-                </span>
-                <span className="font-medium">{event.capacity} total slots</span>
-              </div>
-              <div className="border-t pt-4 space-y-4">
-                {ticketTypes.length === 0 ? (
-                  <p className="text-sm text-muted-foreground italic text-center">
-                    Tickets are not available yet.
-                  </p>
-                ) : (
-                  ticketTypes.map((ticket) => (
-                    <Dialog key={ticket.id}>
-                      <DialogTrigger asChild>
-                        <div className="p-4 border rounded-lg cursor-pointer hover:border-primary transition-colors">
-                          <div className="flex justify-between items-center mb-1">
-                            <h4 className="font-semibold">{ticket.name}</h4>
-                            <span className="font-bold text-primary">
-                              ${ticket.price > 0 ? ticket.price : "Free"}
-                            </span>
-                          </div>
-                          {ticket.description && (
-                            <p className="text-xs text-muted-foreground">{ticket.description}</p>
-                          )}
-                          <div className="text-xs mt-2 font-medium">
-                            {ticket.quantity} remaining
-                          </div>
-                        </div>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Confirm Registration</DialogTitle>
-                          <DialogDescription>
-                            You are about to register for <strong>{event.title}</strong> with a <strong>{ticket.name}</strong> ticket.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="font-semibold text-lg py-4 border-y my-2 flex justify-between">
-                          <span>Total Amount</span>
-                          <span>${ticket.price}</span>
-                        </div>
-                        <Button 
-                          className="w-full" 
-                          onClick={() => handleRegister(ticket.id)}
-                          disabled={isRegistering}
-                        >
-                          {isRegistering ? "Processing..." : "Confirm & Pay"}
-                        </Button>
-                      </DialogContent>
-                    </Dialog>
-                  ))
-                )}
-              </div>
+              {ticketTypes.length === 0 ? (
+                <p className="text-center text-muted-foreground py-4">No tickets available yet.</p>
+              ) : (
+                ticketTypes.map((type) => (
+                  <div key={type.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-semibold">{type.name}</h4>
+                      <span className="font-bold text-primary">
+                        {type.price === 0 ? "Free" : `$${type.price}`}
+                      </span>
+                    </div>
+                    {type.description && <p className="text-xs text-muted-foreground mb-3">{type.description}</p>}
+                    
+                    <div className="flex justify-between items-center text-xs text-muted-foreground mb-3">
+                      <span>{type.limit - type.sold} left</span>
+                    </div>
+
+                    <Button 
+                      className="w-full" 
+                      onClick={() => handleRegister(type.id)}
+                      disabled={isRegistering || type.limit <= type.sold}
+                    >
+                      {isRegistering ? "Processing..." : (type.limit <= type.sold ? "Sold Out" : "Get Ticket")}
+                    </Button>
+                  </div>
+                ))
+              )}
             </CardContent>
-            {user?.role === "ORGANIZER" && user?.id === event.organizerId && (
-              <CardFooter>
-                <Button variant="outline" className="w-full" onClick={() => router.push(`/events/${event.id}/manage`)}>
-                  Manage Event
-                </Button>
-              </CardFooter>
-            )}
+            <CardFooter className="text-xs text-center text-muted-foreground">
+              Secure payment processing via Stripe/Razorpay (Simulated)
+            </CardFooter>
           </Card>
         </div>
       </div>

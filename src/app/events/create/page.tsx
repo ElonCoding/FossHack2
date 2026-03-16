@@ -41,7 +41,7 @@ export default function CreateEventPage() {
   }
 
   const form = useForm<z.infer<typeof eventSchema>>({
-    resolver: zodResolver(eventSchema),
+    resolver: zodResolver(eventSchema) as any,
     defaultValues: {
       title: "",
       description: "",
