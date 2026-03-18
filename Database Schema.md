@@ -1,91 +1,68 @@
-Complete Database Schema
+# Database Schema (MongoDB Migration)
 
-Recommended DB: PostgreSQL
+The system has been migrated from PostgreSQL to MongoDB for improved scalability and flexibility. Prisma ORM is used to interface with MongoDB.
 
-Core Entities
-USERS
------
-id (UUID) PK
-name
-email
-password_hash
-role (student / organizer / admin)
-college
-phone
-created_at
-updated_at
-EVENTS
-------
-id (UUID) PK
-title
-description
-category
-location
-start_date
-end_date
-banner_url
-organizer_id (FK -> USERS.id)
-max_participants
-status (draft / published / closed)
-created_at
-TICKETS
--------
-id (UUID) PK
-event_id (FK -> EVENTS.id)
-ticket_type
-price
-max_quantity
-sold_quantity
-sale_start
-sale_end
-created_at
-REGISTRATIONS
--------------
-id (UUID) PK
-user_id (FK -> USERS.id)
-event_id (FK -> EVENTS.id)
-ticket_id (FK -> TICKETS.id)
-status (registered / cancelled)
-created_at
-PAYMENTS
---------
-id (UUID) PK
-user_id
-event_id
-amount
-payment_gateway
-payment_status
-transaction_id
-created_at
-TICKET_CODES
-------------
-id (UUID) PK
-registration_id
-qr_code
-ticket_status (valid / used)
-checked_in_at
-created_at
-CHECK_INS
----------
-id (UUID) PK
-ticket_code_id
-event_id
-checked_in_by
-check_in_time
-device_id
-NOTIFICATIONS
--------------
-id (UUID) PK
-user_id
-title
-message
-type (email / sms / in_app)
-is_read
-created_at
-Relationships
-User → many Events
-Event → many Tickets
-Event → many Registrations
-Registration → one Ticket
-Registration → one QR Ticket
-Ticket → many Check-ins
+### Collections
+
+#### 1. Users (`User`)
+- `_id`: ObjectId (Primary Key)
+- `email`: String (Unique)
+- `password`: String (Hashed)
+- `name`: String
+- `role`: Enum (STUDENT, ORGANIZER, ADMIN)
+- `createdAt`: DateTime
+- `updatedAt`: DateTime
+
+#### 2. Events (`Event`)
+- `_id`: ObjectId (Primary Key)
+- `title`: String
+- `description`: String
+- `date`: DateTime
+- `location`: String
+- `capacity`: Number
+- `status`: Enum (DRAFT, PUBLISHED, CANCELLED, COMPLETED)
+- `organizerId`: ObjectId (Reference to User)
+- `createdAt`: DateTime
+- `updatedAt`: DateTime
+
+#### 3. Ticket Types (`TicketType`)
+- `_id`: ObjectId (Primary Key)
+- `eventId`: ObjectId (Reference to Event)
+- `name`: String
+- `description`: String?
+- `price`: Number
+- `limit`: Number
+- `sold`: Number
+
+#### 4. Orders (`Order`)
+- `_id`: ObjectId (Primary Key)
+- `userId`: ObjectId (Reference to User)
+- `eventId`: ObjectId (Reference to Event)
+- `totalAmount`: Number
+- `paymentRef`: String?
+- `status`: Enum (PENDING, COMPLETED, FAILED, REFUNDED)
+- `createdAt`: DateTime
+
+#### 5. Tickets (`Ticket`)
+- `_id`: ObjectId (Primary Key)
+- `qrCodeValue`: String (Unique)
+- `userId`: ObjectId (Reference to User)
+- `eventId`: ObjectId (Reference to Event)
+- `ticketTypeId`: ObjectId (Reference to TicketType)
+- `orderId`: ObjectId (Reference to Order)
+- `isCheckedIn`: Boolean
+- `checkInTime`: DateTime?
+
+#### 6. Check-in Logs (`CheckInLog`)
+- `_id`: ObjectId (Primary Key)
+- `ticketId`: ObjectId (Reference to Ticket)
+- `scannedAt`: DateTime
+- `scannedBy`: String (User ID or Name)
+- `status`: String
+
+### Relationships
+- **User ↔ Event**: One-to-Many (Organizer)
+- **Event ↔ TicketType**: One-to-Many
+- **User ↔ Order**: One-to-Many
+- **Order ↔ Ticket**: One-to-Many (One order can contain multiple tickets)
+- **Ticket ↔ CheckInLog**: One-to-Many

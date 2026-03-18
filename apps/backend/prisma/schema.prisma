@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
 }
 
 enum Role {
@@ -27,7 +27,7 @@ enum PaymentStatus {
 }
 
 model User {
-  id        String   @id @default(uuid())
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
   email     String   @unique
   password  String
   name      String
@@ -41,14 +41,14 @@ model User {
 }
 
 model Event {
-  id          String      @id @default(uuid())
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
   title       String
   description String
   date        DateTime
   location    String
   capacity    Int
   status      EventStatus @default(DRAFT)
-  organizerId String
+  organizerId String      @db.ObjectId
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -59,8 +59,8 @@ model Event {
 }
 
 model TicketType {
-  id          String   @id @default(uuid())
-  eventId     String
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  eventId     String   @db.ObjectId
   name        String   // e.g., "Early Bird", "VIP"
   description String?
   price       Float
@@ -72,9 +72,9 @@ model TicketType {
 }
 
 model Order {
-  id            String        @id @default(uuid())
-  userId        String
-  eventId       String
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String        @db.ObjectId
+  eventId       String        @db.ObjectId
   totalAmount   Float
   paymentRef    String?       // Stripe/Razorpay Payment ID
   status        PaymentStatus @default(PENDING)
@@ -86,12 +86,12 @@ model Order {
 }
 
 model Ticket {
-  id           String   @id @default(uuid())
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
   qrCodeValue  String   @unique // Unique string for QR generation
-  userId       String
-  eventId      String
-  ticketTypeId String
-  orderId      String
+  userId       String   @db.ObjectId
+  eventId      String   @db.ObjectId
+  ticketTypeId String   @db.ObjectId
+  orderId      String   @db.ObjectId
   isCheckedIn  Boolean  @default(false)
   checkInTime  DateTime?
   
@@ -103,8 +103,8 @@ model Ticket {
 }
 
 model CheckInLog {
-  id         String   @id @default(uuid())
-  ticketId   String
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  ticketId   String   @db.ObjectId
   scannedAt  DateTime @default(now())
   scannedBy  String   // Organizer/Volunteer ID who scanned
   status     String   // "SUCCESS", "DUPLICATE", "INVALID"
