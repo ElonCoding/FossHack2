@@ -1,4 +1,9 @@
+import { PrismaClient } from '@prisma/client';
+import dotenv from 'dotenv';
+dotenv.config();
+=======
 const { PrismaClient } = require('@prisma/client');
+
 
 const prismaClientSingleton = () => {
   return new PrismaClient({
