@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { prisma } from '../index';
+import { prisma } from '../lib/prisma';
 import { z } from 'zod';
 import { AuthRequest } from '../middlewares/authMiddleware';
 import crypto from 'crypto';
@@ -72,68 +72,65 @@ export const createOrder = async (req: AuthRequest, res: Response): Promise<any>
     const { eventId, ticketTypeId, quantity } = parsedParams.data;
     const userId = req.user!.id;
 
-    // Check if event exists and is published
-    const event = await prisma.event.findUnique({ where: { id: eventId } });
-    if (!event || event.status !== 'PUBLISHED') {
-      return res.status(404).json({ message: 'Valid event not found' });
-    }
+    // Use a transaction to ensure atomicity
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Re-check ticket availability inside transaction
+      const currentTicketType = await tx.ticketType.findUnique({
+        where: { id: ticketTypeId },
+      });
 
-    // Check ticket type availability
-    const ticketType = await prisma.ticketType.findUnique({ where: { id: ticketTypeId } });
-    if (!ticketType || ticketType.eventId !== eventId) {
-      return res.status(400).json({ message: 'Invalid ticket type' });
-    }
+      if (!currentTicketType || currentTicketType.eventId !== eventId) {
+        throw new Error('Invalid ticket type');
+      }
 
-    if (ticketType.sold + quantity > ticketType.limit) {
-      return res.status(400).json({ message: 'Not enough tickets available' });
-    }
+      if (currentTicketType.sold + quantity > currentTicketType.limit) {
+        throw new Error('Not enough tickets available');
+      }
 
-    // Calculate total amount
-    const totalAmount = ticketType.price * quantity;
+      // 2. Calculate amount
+      const totalAmount = currentTicketType.price * quantity;
 
-    // Create Order
-    // In a real app, we would initiate payment here (Stripe/Razorpay)
-    // For now, we simulate a successful payment immediately
-    const order = await prisma.order.create({
-      data: {
-        userId,
-        eventId,
-        totalAmount,
-        status: 'COMPLETED', // Simulating successful payment
-        paymentRef: `PAY-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
-      },
-    });
+      // 3. Create Order
+      const order = await tx.order.create({
+        data: {
+          userId,
+          eventId,
+          totalAmount,
+          status: 'COMPLETED',
+          paymentRef: `PAY-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
+        },
+      });
 
-    // Generate Tickets
-    const ticketsData = [];
-    for (let i = 0; i < quantity; i++) {
-      ticketsData.push({
+      // 4. Generate Tickets
+      const ticketsData = Array.from({ length: quantity }).map(() => ({
         userId,
         eventId,
         ticketTypeId,
         orderId: order.id,
-        qrCodeValue: crypto.randomBytes(16).toString('hex'), // Unique QR value
+        qrCodeValue: crypto.randomBytes(16).toString('hex'),
+      }));
+
+      await tx.ticket.createMany({
+        data: ticketsData,
       });
-    }
 
-    await prisma.ticket.createMany({
-      data: ticketsData,
-    });
+      // 5. Update sold count
+      await tx.ticketType.update({
+        where: { id: ticketTypeId },
+        data: { sold: { increment: quantity } },
+      });
 
-    // Update sold count
-    await prisma.ticketType.update({
-      where: { id: ticketTypeId },
-      data: { sold: { increment: quantity } },
+      return order;
     });
 
     res.status(201).json({ 
       message: 'Order created and tickets generated successfully', 
-      orderId: order.id 
+      orderId: result.id 
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
-    res.status(500).json({ message: 'Server error creating order' });
+    res.status(400).json({ message: error.message || 'Server error creating order' });
   }
 };
 

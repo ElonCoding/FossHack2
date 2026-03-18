@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { prisma } from '../index';
+import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middlewares/authMiddleware';
 
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<any> => {

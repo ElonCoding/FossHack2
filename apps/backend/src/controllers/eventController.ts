@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { prisma } from '../index';
+import { prisma } from '../lib/prisma';
 import { z } from 'zod';
 import { AuthRequest } from '../middlewares/authMiddleware';
 
@@ -9,6 +9,14 @@ const createEventSchema = z.object({
   date: z.string(), // ISO date string
   location: z.string().min(3),
   capacity: z.number().int().positive(),
+});
+
+const updateEventSchema = z.object({
+  title: z.string().min(3).optional(),
+  description: z.string().min(10).optional(),
+  date: z.string().optional(),
+  location: z.string().min(3).optional(),
+  capacity: z.number().int().positive().optional(),
 });
 
 export const createEvent = async (req: AuthRequest, res: Response): Promise<any> => {
@@ -87,10 +95,15 @@ export const getEventById = async (req: Request, res: Response): Promise<any> =>
 export const updateEvent = async (req: AuthRequest, res: Response): Promise<any> => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const parsedUpdate = updateEventSchema.safeParse(req.body);
+    if (!parsedUpdate.success) {
+      return res.status(400).json({ message: 'Invalid update data', errors: parsedUpdate.error.issues });
+    }
+
+    const updateData = { ...parsedUpdate.data };
     
     if (updateData.date) {
-      updateData.date = new Date(updateData.date);
+      (updateData as any).date = new Date(updateData.date);
     }
 
     const event = await prisma.event.findUnique({ where: { id: id as string } });
