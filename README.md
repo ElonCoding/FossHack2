@@ -6,8 +6,8 @@ A production-ready full-stack platform for college tech fests, hackathons, and w
 
 - **Frontend**: Next.js 15 (App Router), TailwindCSS, Shadcn UI (Base UI), Zustand, Framer Motion
 - **Backend**: Node.js, Express, Prisma ORM, JWT Auth, Zod
-- **Database**: PostgreSQL
-- **Infrastructure**: Docker, Redis (Jobs/Caching)
+- **Database**: MongoDB (Atlas or Local)
+- **Infrastructure**: Redis (Upstash or Local)
 
 ## ✨ Core Features
 
@@ -24,8 +24,8 @@ A production-ready full-stack platform for college tech fests, hackathons, and w
 ### Prerequisites
 
 - Node.js (v18+)
-- Docker & Docker Compose
-- PostgreSQL (or use Docker)
+- MongoDB Atlas cluster (free tier) or Local MongoDB installed
+- Upstash Redis database (free tier) or Local Redis
 
 ### Installation
 
@@ -55,11 +55,6 @@ A production-ready full-stack platform for college tech fests, hackathons, and w
    npm run dev
    ```
 
-4. **Infrastructure (optional)**
-   ```bash
-   docker-compose up -d
-   ```
-
 ## 🏗️ Project Structure
 
 ```bash
@@ -67,7 +62,6 @@ root/
 ├── apps/
 │   ├── frontend/        # Next.js Application
 │   └── backend/         # Express + Prisma API
-├── docker-compose.yml   # Infrastructure setup
 └── README.md
 ```
 
