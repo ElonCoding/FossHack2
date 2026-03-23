@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
+import { getDb } from '../lib/db';
 import { z } from 'zod';
 import { AuthRequest } from '../middlewares/authMiddleware';
+import { ObjectId } from 'mongodb';
 
 const createEventSchema = z.object({
   title: z.string().min(3),
@@ -29,20 +30,24 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<any>
 
     const { title, description, date, location, capacity } = parsedParams.data;
     const organizerId = req.user!.id;
+    const db = getDb();
 
-    const event = await prisma.event.create({
-      data: {
-        title,
-        description,
-        date: new Date(date),
-        location,
-        capacity,
-        organizerId,
-        status: 'DRAFT',
-      },
+    const result = await db.collection('events').insertOne({
+      title,
+      description,
+      date: new Date(date),
+      location,
+      capacity,
+      organizerId,
+      status: 'DRAFT',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
 
-    res.status(201).json({ message: 'Event created successfully', event });
+    res.status(201).json({ 
+      message: 'Event created successfully', 
+      event: { id: result.insertedId.toString(), title, status: 'DRAFT' } 
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error creating event' });
@@ -52,16 +57,44 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<any>
 export const getEvents = async (req: Request, res: Response): Promise<any> => {
   try {
     const status = req.query.status as string;
-    const whereClause = status ? { status: status as any } : { status: 'PUBLISHED' };
-
-    const events = await prisma.event.findMany({
-      where: whereClause,
-      include: {
-        organizer: { select: { id: true, name: true, email: true } },
-        ticketTypes: true,
+    const db = getDb();
+    
+    // Simplification of complex include: we can use aggregation or separate queries
+    const events = await db.collection('events').aggregate([
+      { $match: { status: status || 'PUBLISHED' } },
+      { $sort: { date: 1 } },
+      {
+        $addFields: {
+          organizerObjectId: { $toObjectId: "$organizerId" }
+        }
       },
-      orderBy: { date: 'asc' },
-    });
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'organizerObjectId',
+          foreignField: '_id',
+          as: 'organizer'
+        }
+      },
+      { $unwind: '$organizer' },
+      {
+        $project: {
+          id: { $toString: "$_id" },
+          _id: 0,
+          title: 1,
+          description: 1,
+          date: 1,
+          location: 1,
+          capacity: 1,
+          status: 1,
+          organizer: {
+            id: { $toString: "$organizer._id" },
+            name: "$organizer.name",
+            email: "$organizer.email"
+          }
+        }
+      }
+    ]).toArray();
 
     res.status(200).json({ events });
   } catch (error) {
@@ -73,13 +106,53 @@ export const getEvents = async (req: Request, res: Response): Promise<any> => {
 export const getEventById = async (req: Request, res: Response): Promise<any> => {
   try {
     const { id } = req.params;
-    const event = await prisma.event.findUnique({
-      where: { id: id as string },
-      include: {
-        organizer: { select: { id: true, name: true, email: true } },
-        ticketTypes: true,
+    const db = getDb();
+
+    const eventArr = await db.collection('events').aggregate([
+      { $match: { _id: new ObjectId(id as string) } },
+      {
+        $addFields: {
+          organizerObjectId: { $toObjectId: "$organizerId" }
+        }
       },
-    });
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'organizerObjectId',
+          foreignField: '_id',
+          as: 'organizer'
+        }
+      },
+      { $unwind: '$organizer' },
+      {
+        $lookup: {
+          from: 'ticketTypes',
+          localField: '_id',
+          foreignField: 'eventId',
+          as: 'ticketTypes'
+        }
+      },
+      {
+        $project: {
+          id: { $toString: "$_id" },
+          _id: 0,
+          title: 1,
+          description: 1,
+          date: 1,
+          location: 1,
+          capacity: 1,
+          status: 1,
+          organizer: {
+            id: { $toString: "$organizer._id" },
+            name: "$organizer.name",
+            email: "$organizer.email"
+          },
+          ticketTypes: 1
+        }
+      }
+    ]).toArray();
+
+    const event = eventArr[0];
 
     if (!event) {
       return res.status(404).json({ message: 'Event not found' });
@@ -95,31 +168,34 @@ export const getEventById = async (req: Request, res: Response): Promise<any> =>
 export const updateEvent = async (req: AuthRequest, res: Response): Promise<any> => {
   try {
     const { id } = req.params;
+    const db = getDb();
     const parsedUpdate = updateEventSchema.safeParse(req.body);
     if (!parsedUpdate.success) {
       return res.status(400).json({ message: 'Invalid update data', errors: parsedUpdate.error.issues });
     }
 
-    const updateData = { ...parsedUpdate.data };
+    const updateData = { ...parsedUpdate.data, updatedAt: new Date() };
     
     if (updateData.date) {
       (updateData as any).date = new Date(updateData.date);
     }
 
-    const event = await prisma.event.findUnique({ where: { id: id as string } });
+    const event = await db.collection('events').findOne({ _id: new ObjectId(id as string) });
 
     if (!event) {
       return res.status(404).json({ message: 'Event not found' });
     }
 
-    if (event.organizerId !== req.user!.id && req.user!.role !== 'ADMIN') {
+    if (event.organizerId.toString() !== req.user!.id && req.user!.role !== 'ADMIN') {
       return res.status(403).json({ message: 'Forbidden: You do not own this event' });
     }
 
-    const updatedEvent = await prisma.event.update({
-      where: { id: id as string },
-      data: updateData,
-    });
+    await db.collection('events').updateOne(
+      { _id: new ObjectId(id as string) },
+      { $set: updateData }
+    );
+
+    const updatedEvent = await db.collection('events').findOne({ _id: new ObjectId(id as string) });
 
     res.status(200).json({ message: 'Event updated successfully', event: updatedEvent });
   } catch (error) {
@@ -135,26 +211,29 @@ const updateStatusSchema = z.object({
 export const updateEventStatus = async (req: AuthRequest, res: Response): Promise<any> => {
   try {
     const { id } = req.params;
+    const db = getDb();
     const parsedParams = updateStatusSchema.safeParse(req.body);
 
     if (!parsedParams.success) {
       return res.status(400).json({ message: 'Invalid status', errors: parsedParams.error.issues });
     }
 
-    const event = await prisma.event.findUnique({ where: { id: id as string } });
+    const event = await db.collection('events').findOne({ _id: new ObjectId(id as string) });
 
     if (!event) {
       return res.status(404).json({ message: 'Event not found' });
     }
 
-    if (event.organizerId !== req.user!.id && req.user!.role !== 'ADMIN') {
+    if (event.organizerId.toString() !== req.user!.id && req.user!.role !== 'ADMIN') {
       return res.status(403).json({ message: 'Forbidden: You do not own this event' });
     }
 
-    const updatedEvent = await prisma.event.update({
-      where: { id: id as string },
-      data: { status: parsedParams.data.status },
-    });
+    await db.collection('events').updateOne(
+      { _id: new ObjectId(id as string) },
+      { $set: { status: parsedParams.data.status, updatedAt: new Date() } }
+    );
+
+    const updatedEvent = await db.collection('events').findOne({ _id: new ObjectId(id as string) });
 
     res.status(200).json({ message: `Event status updated to ${parsedParams.data.status}`, event: updatedEvent });
   } catch (error) {
@@ -162,3 +241,4 @@ export const updateEventStatus = async (req: AuthRequest, res: Response): Promis
     res.status(500).json({ message: 'Server error updating event status' });
   }
 };
+
