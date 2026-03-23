@@ -34,6 +34,14 @@
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
-    "skipLibCheck": true,
-  }
+    "skipLibCheck": true
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test-api.ts",
+    "minimal-test.js",
+    "test-prisma.ts",
+    "test-prisma.js"
+  ]
 }

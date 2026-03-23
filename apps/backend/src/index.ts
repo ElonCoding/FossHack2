@@ -1,17 +1,23 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
-import { prisma } from './lib/prisma';
+import { connectDB } from './lib/db';
 import { errorMiddleware } from './middlewares/errorMiddleware';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Export prisma for other modules (temporary)
-export { prisma };
+console.log('Starting server initialization...');
+
+// Connect to Database
+connectDB().then(() => {
+  console.log('Database connection logic finished');
+}).catch(err => {
+  console.error('Initial database connection failed:', err);
+});
 
 // Middleware
 app.use(cors({
@@ -45,3 +51,4 @@ app.use(errorMiddleware);
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
