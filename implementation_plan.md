@@ -32,15 +32,7 @@ We will set up a monorepo structure containing both the frontend and backend, or
 
 Here is the proposed Prisma Schema to fulfill the core features:
 
-```prisma
-generator client {
-  provider = "prisma-client-js"
-}
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
 
 enum Role {
   STUDENT

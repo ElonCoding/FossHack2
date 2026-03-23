@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../lib/prisma';
+import { getDb } from '../lib/db';
 import { z } from 'zod';
 import { AuthRequest } from '../middlewares/authMiddleware';
+import { ObjectId } from 'mongodb';
 
 const registerSchema = z.object({
   name: z.string().min(2),
@@ -21,8 +22,9 @@ export const register = async (req: Request, res: Response): Promise<any> => {
     }
 
     const { name, email, password, role } = parsedParams.data;
+    const db = getDb();
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await db.collection('users').findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists' });
     }
@@ -30,14 +32,21 @@ export const register = async (req: Request, res: Response): Promise<any> => {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: passwordHash,
-        role: role || 'STUDENT',
-      },
+    const result = await db.collection('users').insertOne({
+      name,
+      email,
+      password: passwordHash,
+      role: role || 'STUDENT',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
+
+    const user = {
+      id: result.insertedId.toString(),
+      name,
+      email,
+      role: role || 'STUDENT',
+    };
 
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET || 'dev_secret_key_123', {
       expiresIn: '24h',
@@ -46,7 +55,7 @@ export const register = async (req: Request, res: Response): Promise<any> => {
     res.status(201).json({
       message: 'User registered successfully',
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user,
     });
   } catch (error) {
     console.error(error);
@@ -68,16 +77,26 @@ export const login = async (req: Request, res: Response): Promise<any> => {
     }
 
     const { email, password } = parsedParams.data;
+    console.log('Login attempt for:', email);
+    const db = getDb();
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
+    const userDoc = await db.collection('users').findOne({ email });
+    console.log('User looked up:', !!userDoc);
+    if (!userDoc) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, userDoc.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
+
+    const user = {
+      id: userDoc._id.toString(),
+      name: userDoc.name,
+      email: userDoc.email,
+      role: userDoc.role,
+    };
 
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET || 'dev_secret_key_123', {
       expiresIn: '24h',
@@ -86,24 +105,33 @@ export const login = async (req: Request, res: Response): Promise<any> => {
     res.status(200).json({
       message: 'Logged in successfully',
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user,
     });
   } catch (error) {
-    console.error(error);
+    console.error('Login error detail:', error);
+    console.error('Full stack trace of catch:', new Error().stack);
     res.status(500).json({ message: 'Server error during login' });
   }
 };
 
 export const getMe = async (req: AuthRequest, res: Response): Promise<any> => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user?.id },
-      select: { id: true, name: true, email: true, role: true, createdAt: true },
-    });
+    const db = getDb();
+    const userDoc = await db.collection('users').findOne(
+      { _id: new ObjectId(req.user?.id) }
+    );
 
-    if (!user) {
+    if (!userDoc) {
       return res.status(404).json({ message: 'User not found' });
     }
+
+    const user = {
+      id: userDoc._id.toString(),
+      name: userDoc.name,
+      email: userDoc.email,
+      role: userDoc.role,
+      createdAt: userDoc.createdAt,
+    };
 
     res.status(200).json({ user });
   } catch (error) {

@@ -1,39 +1,54 @@
 import { Response } from 'express';
-import { prisma } from '../lib/prisma';
+import { getDb } from '../lib/db';
 import { AuthRequest } from '../middlewares/authMiddleware';
+import { ObjectId } from 'mongodb';
 
 export const getDashboardStats = async (req: AuthRequest, res: Response): Promise<any> => {
   try {
     const userId = req.user!.id;
     const userRole = req.user!.role;
+    const db = getDb();
 
     // Filter events by organizer if not admin
-    const whereClause = userRole === 'ADMIN' ? {} : { organizerId: userId };
+    const matchClause = userRole === 'ADMIN' ? {} : { organizerId: userId };
 
-    const events = await prisma.event.findMany({
-      where: whereClause,
-      include: {
-        _count: { select: { tickets: true } },
+    const events = await db.collection('events').aggregate([
+      { $match: matchClause },
+      {
+        $lookup: {
+          from: 'tickets',
+          localField: '_id',
+          foreignField: 'eventId',
+          as: 'eventTickets'
+        }
       },
-    });
+      {
+        $addFields: {
+          ticketCount: { $size: "$eventTickets" }
+        }
+      },
+      {
+        $project: {
+          id: { $toString: "$_id" },
+          title: 1,
+          status: 1,
+          date: 1,
+          ticketCount: 1
+        }
+      }
+    ]).toArray();
 
     const totalEvents = events.length;
+    const totalTicketsSold = events.reduce((sum, event) => sum + (event.ticketCount || 0), 0);
     
     // Calculate total revenue from completed orders for these events
-    // This is a bit complex with Prisma across relations, so we can aggregate differently
-    // Or fetch orders for these events
-    const eventIds = events.map(e => e.id);
-    
-    const orders = await prisma.order.findMany({
-      where: { 
-        eventId: { in: eventIds },
-        status: 'COMPLETED'
-      },
-      select: { totalAmount: true }
-    });
+    const eventIds = events.map(e => new ObjectId(e.id));
+    const orders = await db.collection('orders').find({
+      eventId: { $in: eventIds },
+      status: 'COMPLETED'
+    }).toArray();
 
-    const totalRevenue = orders.reduce((sum, order) => sum + order.totalAmount, 0);
-    const totalTicketsSold = events.reduce((sum, event) => sum + event._count.tickets, 0);
+    const totalRevenue = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
 
     res.status(200).json({
       totalEvents,
@@ -50,25 +65,56 @@ export const getDashboardStats = async (req: AuthRequest, res: Response): Promis
 export const getEventRegistrations = async (req: AuthRequest, res: Response): Promise<any> => {
    try {
      const { eventId } = req.params;
+     const db = getDb();
 
-     const event = await prisma.event.findUnique({ where: { id: eventId as string } });
+     const event = await db.collection('events').findOne({ _id: new ObjectId(eventId as string) });
      if (!event) {
        return res.status(404).json({ message: 'Event not found' });
      }
 
-     if (event.organizerId !== req.user!.id && req.user!.role !== 'ADMIN') {
+     if (event.organizerId !== (req.user!.id as any) && req.user!.role !== 'ADMIN') {
        return res.status(403).json({ message: 'Forbidden: You do not own this event' });
      }
 
-     const tickets = await prisma.ticket.findMany({
-       where: { eventId: eventId as string },
-       include: {
-         user: { select: { id: true, name: true, email: true } },
-         ticketType: { select: { name: true, price: true } },
-         order: { select: { status: true, paymentRef: true } }
+     const tickets = await db.collection('tickets').aggregate([
+       { $match: { eventId: new ObjectId(eventId as string) } },
+       {
+         $lookup: {
+           from: 'users',
+           localField: 'userId',
+           foreignField: '_id',
+           as: 'user'
+         }
        },
-       orderBy: { id: 'desc' } // tickets don't have createdAt, use id or join order
-     });
+       { $unwind: '$user' },
+       {
+         $lookup: {
+           from: 'ticketTypes',
+           localField: 'ticketTypeId',
+           foreignField: '_id',
+           as: 'ticketType'
+         }
+       },
+       { $unwind: '$ticketType' },
+       {
+         $lookup: {
+           from: 'orders',
+           localField: 'orderId',
+           foreignField: '_id',
+           as: 'order'
+         }
+       },
+       { $unwind: '$order' },
+       {
+         $project: {
+           id: { $toString: "$_id" },
+           user: { id: { $toString: "$user._id" }, name: "$user.name", email: "$user.email" },
+           ticketType: { name: "$ticketType.name", price: "$ticketType.price" },
+           order: { status: "$order.status", paymentRef: "$order.paymentRef" }
+         }
+       },
+       { $sort: { _id: -1 } }
+     ]).toArray();
 
      res.status(200).json({ registrations: tickets });
    } catch (error) {
@@ -76,3 +122,4 @@ export const getEventRegistrations = async (req: AuthRequest, res: Response): Pr
       res.status(500).json({ message: 'Server error fetching registrations' });
    }
 };
+
