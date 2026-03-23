@@ -91,8 +91,15 @@ const createMockDb = (): any => {
 export const connectDB = async (): Promise<Db> => {
   if (db) return db;
 
-  const uri = process.env.DATABASE_URL || 'mongodb+srv://Fosshack:hack123@cluster0.scelpyr.mongodb.net/openevent?appName=Cluster0';
-  const dbName = uri.split('/').pop()?.split('?')[0] || 'openevent';
+  const uri = process.env.DATABASE_URL;
+  const dbName = process.env.DB_NAME || 'openevent';
+
+  if (!uri) {
+    console.error('DATABASE_URL is not defined in environment variables');
+    // Still proceed to mock DB if needed
+    db = createMockDb() as unknown as Db;
+    return db;
+  }
 
   try {
     console.log('Connecting to MongoDB at:', uri.replace(/:([^:@]{1,})@/, ':****@'));
@@ -103,7 +110,11 @@ export const connectDB = async (): Promise<Db> => {
     
     await client.connect();
     db = client.db(dbName);
-    console.log('Successfully connected to MongoDB');
+    
+    // Create indexes
+    await db.collection('users').createIndex({ email: 1 }, { unique: true });
+    
+    console.log('Successfully connected to MongoDB and ensured indexes');
     return db;
   } catch (error) {
     console.error('Failed to connect to MongoDB:', error);

@@ -186,7 +186,7 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<any>
       return res.status(404).json({ message: 'Event not found' });
     }
 
-    if (event.organizerId !== (req.user!.id as any) && req.user!.role !== 'ADMIN') {
+    if (event.organizerId.toString() !== req.user!.id && req.user!.role !== 'ADMIN') {
       return res.status(403).json({ message: 'Forbidden: You do not own this event' });
     }
 
@@ -224,7 +224,7 @@ export const updateEventStatus = async (req: AuthRequest, res: Response): Promis
       return res.status(404).json({ message: 'Event not found' });
     }
 
-    if (event.organizerId !== (req.user!.id as any) && req.user!.role !== 'ADMIN') {
+    if (event.organizerId.toString() !== req.user!.id && req.user!.role !== 'ADMIN') {
       return res.status(403).json({ message: 'Forbidden: You do not own this event' });
     }
 

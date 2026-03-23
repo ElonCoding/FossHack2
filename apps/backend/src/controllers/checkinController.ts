@@ -27,7 +27,7 @@ export const checkInUser = async (req: AuthRequest, res: Response): Promise<any>
       return res.status(404).json({ message: 'Event not found' });
     }
 
-    if (event.organizerId !== scannerId && req.user!.role !== 'ADMIN') {
+    if (event.organizerId.toString() !== scannerId && req.user!.role !== 'ADMIN') {
       return res.status(403).json({ message: 'Forbidden: You do not own this event' });
     }
 
