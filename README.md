@@ -1,3 +1,4 @@
+
 <p align="center">
   <h1 align="center">🎪 OpenEvent</h1>
   <p align="center"><strong>Open Source Event Registration & Ticketing Platform</strong></p>
@@ -163,7 +164,6 @@ OpenEvent is a **privacy-focused, self-hosted alternative** to commercial event 
 
 ### Prerequisites
 
-<<<<<<< main
 - **Node.js** v18 or higher
 - **MongoDB** — Atlas (free tier) or a local MongoDB installation
 - **npm** (comes with Node.js)
@@ -264,7 +264,6 @@ Navigate to `http://localhost:3000`. You're ready to go! 🎉
 ```
 root/
 ├── apps/
-<<<<<<< main
 │   ├── frontend/                  # Next.js Application
 │   │   ├── src/
 │   │   │   ├── app/               # Pages (App Router)
@@ -345,3 +344,4 @@ This is an open-source project — contributions are welcome!
 ## 📜 License
 
 This project is licensed under the **MIT License** — free to use, modify, and distribute.
+>>>>>>> master

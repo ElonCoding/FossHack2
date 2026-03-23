@@ -1,1 +1,0 @@
-src/index.ts(5,10): error TS2305: Module '"@prisma/client"' has no exported member 'PrismaClient'.

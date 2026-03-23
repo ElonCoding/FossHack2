@@ -28,8 +28,7 @@ Strong ecosystem
 Easy integration
 
 Database
-PostgreSQL
-Prisma ORM
+MongoDB
 Authentication
 JWT
 Google OAuth (optional)
