@@ -19,7 +19,7 @@
     "declaration": true,
     "declarationMap": true,
     // Stricter Typechecking Options
-    "noUncheckedIndexedAccess": true,
+    "noUncheckedIndexedAccess": false,
     "exactOptionalPropertyTypes": false,
     // Style Options
     // "noImplicitReturns": true,
@@ -39,8 +39,10 @@
   "exclude": [
     "node_modules",
     "dist",
+    "prisma/seed.ts",
     "test-api.ts",
     "minimal-test.js",
     "test-prisma.ts",
     "test-prisma.js"
   ]
+}

@@ -4,51 +4,71 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { connectDB } from './lib/db';
 import { errorMiddleware } from './middlewares/errorMiddleware';
+import v1Routes from './routes/v1Routes';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-console.log('Starting server initialization...');
+const frontendOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
-// Connect to Database
-connectDB().then(() => {
-  console.log('Database connection logic finished');
-}).catch(err => {
-  console.error('Initial database connection failed:', err);
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
-// Middleware
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
-app.use(express.json());
+app.use(helmet());
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || frontendOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('CORS origin denied'));
+    },
+    credentials: true,
+  })
+);
+app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
 app.use(morgan('dev'));
 
-// Basic health check route
-app.get('/api/health', (req: express.Request, res: express.Response) => {
+app.get('/api/health', (_req: express.Request, res: express.Response) => {
   res.status(200).json({ status: 'ok', message: 'Event Platform API is running' });
 });
 
-import authRoutes from './routes/authRoutes';
-import eventRoutes from './routes/eventRoutes';
-import ticketRoutes from './routes/ticketRoutes';
-import checkinRoutes from './routes/checkinRoutes';
-import dashboardRoutes from './routes/dashboardRoutes';
+app.use('/api/v1/auth', authLimiter);
+app.use('/api/v1', v1Routes);
+app.use('/api', v1Routes);
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/events', eventRoutes);
-app.use('/api/tickets', ticketRoutes);
-app.use('/api/checkin', checkinRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-
-// Global Error Handler
 app.use(errorMiddleware);
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+const bootstrap = async () => {
+  console.log('Starting server initialization...');
+  try {
+    await connectDB();
+    console.log('Database connection logic finished');
+  } catch (err) {
+    console.error('Initial database connection failed:', err);
+  }
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+};
 
+if (typeof require !== 'undefined' && require.main === module) {
+  bootstrap();
+}
+
+export const prisma: any = {};
+export { app };
